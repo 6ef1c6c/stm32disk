@@ -27,8 +27,11 @@ HAL_SRC := $(HAL)/Src/stm32f1xx_hal.c \
            $(HAL)/Src/stm32f1xx_hal_gpio.c $(HAL)/Src/stm32f1xx_hal_cortex.c \
            $(HAL)/Src/stm32f1xx_hal_flash.c $(HAL)/Src/stm32f1xx_hal_flash_ex.c \
            $(HAL)/Src/stm32f1xx_hal_pwr.c $(HAL)/Src/stm32f1xx_hal_pcd.c \
-           $(HAL)/Src/stm32f1xx_hal_pcd_ex.c
-USB_SRC := $(wildcard $(USBDEV)/Core/Src/*.c) $(wildcard $(USBDEV)/Class/MSC/Src/*.c)
+           $(HAL)/Src/stm32f1xx_hal_pcd_ex.c $(HAL)/Src/stm32f1xx_ll_usb.c
+USB_SRC := $(USBDEV)/Core/Src/usbd_core.c $(USBDEV)/Core/Src/usbd_ctlreq.c \
+           $(USBDEV)/Core/Src/usbd_ioreq.c \
+           $(USBDEV)/Class/MSC/Src/usbd_msc.c $(USBDEV)/Class/MSC/Src/usbd_msc_bot.c \
+           $(USBDEV)/Class/MSC/Src/usbd_msc_data.c $(USBDEV)/Class/MSC/Src/usbd_msc_scsi.c
 CMSIS_SRC := $(CMSIS)/Device/ST/STM32F1xx/Source/Templates/system_stm32f1xx.c
 STARTUP := $(CMSIS)/Device/ST/STM32F1xx/Source/Templates/gcc/startup_stm32f103xb.s
 

@@ -19,7 +19,6 @@
 #define TICK_INT_PRIORITY       0x0FU
 #define USE_RTOS                0U
 #define PREFETCH_ENABLE         1U
-#define USE_HAL_DRIVER
 
 #ifdef HAL_RCC_MODULE_ENABLED
 #include "stm32f1xx_hal_rcc.h"

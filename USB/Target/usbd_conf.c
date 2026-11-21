@@ -3,7 +3,6 @@
 #include "usbd_desc.h"
 
 PCD_HandleTypeDef hpcd_USB_FS;
-extern USBD_HandleTypeDef hUsbDeviceFS;
 
 void HAL_PCD_MspInit(PCD_HandleTypeDef *pcd)
 {
@@ -77,9 +76,9 @@ uint8_t USBD_LL_IsStallEP(USBD_HandleTypeDef *pdev, uint8_t addr)
 }
 USBD_StatusTypeDef USBD_LL_SetUSBAddress(USBD_HandleTypeDef *pdev, uint8_t addr)
 { (void)pdev; return (HAL_PCD_SetAddress(&hpcd_USB_FS, addr) == HAL_OK) ? USBD_OK : USBD_FAIL; }
-USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev, uint8_t addr, uint8_t *buf, uint32_t len)
+USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev, uint8_t addr, uint8_t *buf, uint16_t len)
 { (void)pdev; return (HAL_PCD_EP_Transmit(&hpcd_USB_FS, addr, buf, len) == HAL_OK) ? USBD_OK : USBD_FAIL; }
-USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev, uint8_t addr, uint8_t *buf, uint32_t len)
+USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev, uint8_t addr, uint8_t *buf, uint16_t len)
 { (void)pdev; return (HAL_PCD_EP_Receive(&hpcd_USB_FS, addr, buf, len) == HAL_OK) ? USBD_OK : USBD_FAIL; }
 uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *pdev, uint8_t addr)
 { (void)pdev; return HAL_PCD_EP_GetRxCount(&hpcd_USB_FS, addr); }

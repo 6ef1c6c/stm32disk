@@ -13,14 +13,9 @@ static uint32_t s_cache_page, s_ram_sectors, s_flash_sectors;
 extern char _end[];
 extern char __heap_end[];
 
-static uint32_t chip_flash_size(void)
-{
-    return (uint32_t)(*(volatile const uint16_t *)FLASH_SIZE_REG) * 1024u;
-}
-
 static uint32_t compute_flash_sectors(void)
 {
-    uint32_t total = chip_flash_size();
+    uint32_t total = (uint32_t)(*(volatile const uint16_t *)FLASH_SIZE_REG) * 1024u;
     uint32_t min = BlockDev_FLASH_BASE + BlockDev_FLASH_SAFETY_MARGIN + BlockDev_SECTOR_SIZE;
     return (total > min) ? (total - BlockDev_FLASH_BASE - BlockDev_FLASH_SAFETY_MARGIN) / BlockDev_SECTOR_SIZE : 0u;
 }
@@ -55,16 +50,14 @@ static uint8_t flash_program_page(uint32_t addr, const uint8_t *data)
     return status != HAL_OK;
 }
 
-static uint8_t flash_cache_commit(void)
+static void flash_cache_commit(void)
 {
-    uint8_t r;
-    if (!s_cache_valid || !s_cache_dirty) return 0u;
+    if (!s_cache_valid || !s_cache_dirty) return;
     HAL_NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
-    r = flash_program_page(s_cache_page, s_page_buffer);
+    uint8_t r = flash_program_page(s_cache_page, s_page_buffer);
     HAL_NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
     if (r) s_flash_error = 1u;
     else s_cache_dirty = 0u;
-    return r;
 }
 
 static void make_boot_sector(uint8_t *b, const char *label, uint32_t sectors)
@@ -84,17 +77,10 @@ static void make_boot_sector(uint8_t *b, const char *label, uint32_t sectors)
     b[24] = 0x01; b[25] = 0x00;
     b[26] = 0x01; b[27] = 0x00;
     b[36] = 0x80; b[38] = 0x29;
-    b[39] = 0x00; b[40] = 0x00; b[41] = 0x00; b[42] = 0x00;
     memset(&b[43], ' ', 11);
-    for (uint32_t i = 0; i < 11 && label[i]; ++i) b[43 + i] = (uint8_t)label[i];
+    for (uint8_t i = 0; i < 11u && label[i]; ++i) b[43 + i] = (uint8_t)label[i];
     memcpy(&b[54], "FAT12   ", 8);
     b[510] = 0x55; b[511] = 0xAA;
-}
-
-static void make_fat_sector(uint8_t *b)
-{
-    memset(b, 0, BlockDev_SECTOR_SIZE);
-    b[0] = 0xF8; b[1] = 0xFF; b[2] = 0xFF;
 }
 
 static uint8_t flash_is_blank(void)
@@ -107,9 +93,8 @@ static uint8_t flash_is_blank(void)
 
 static uint8_t format_flash_disk(void)
 {
-    uint8_t sector[BlockDev_SECTOR_SIZE];
     uint32_t current_page = 0xFFFFFFFFu;
-    memset(s_page_buffer, 0xFF, BlockDev_FLASH_PAGE_SIZE);
+    memset(s_page_buffer, 0, BlockDev_FLASH_PAGE_SIZE);
 
     for (uint32_t lba = 0; lba < s_flash_sectors; ++lba) {
         uint32_t addr = BlockDev_FLASH_BASE + lba * BlockDev_SECTOR_SIZE;
@@ -119,14 +104,16 @@ static uint8_t format_flash_disk(void)
         if (page != current_page) {
             if (current_page != 0xFFFFFFFFu && flash_program_page(current_page, s_page_buffer)) return 1u;
             current_page = page;
-            memset(s_page_buffer, 0xFF, BlockDev_FLASH_PAGE_SIZE);
+            memset(s_page_buffer, 0, BlockDev_FLASH_PAGE_SIZE);
         }
 
-        if (lba == 0u) make_boot_sector(sector, "FLASHDISK", s_flash_sectors);
-        else if (lba == 1u) make_fat_sector(sector);
-        else memset(sector, 0, BlockDev_SECTOR_SIZE);
-
-        memcpy(&s_page_buffer[off], sector, BlockDev_SECTOR_SIZE);
+        if (lba == 0u) {
+            make_boot_sector(&s_page_buffer[off], "FLASHDISK", s_flash_sectors);
+        } else if (lba == 1u) {
+            s_page_buffer[off] = 0xF8;
+            s_page_buffer[off + 1u] = 0xFF;
+            s_page_buffer[off + 2u] = 0xFF;
+        }
     }
     if (current_page != 0xFFFFFFFFu && flash_program_page(current_page, s_page_buffer)) return 1u;
     return 0u;
@@ -146,7 +133,9 @@ void BlockDev_Init(void)
     if (s_ram_disk && s_ram_sectors >= 2u) {
         memset(s_ram_disk, 0, s_ram_sectors * BlockDev_SECTOR_SIZE);
         make_boot_sector(s_ram_disk, "RAMDISK", s_ram_sectors);
-        make_fat_sector(&s_ram_disk[BlockDev_SECTOR_SIZE]);
+        s_ram_disk[BlockDev_SECTOR_SIZE] = 0xF8;
+        s_ram_disk[BlockDev_SECTOR_SIZE + 1u] = 0xFF;
+        s_ram_disk[BlockDev_SECTOR_SIZE + 2u] = 0xFF;
     }
     if (!s_flash_error && flash_is_blank() && format_flash_disk()) s_flash_error = 1u;
     s_initialized = 1u;
@@ -154,7 +143,6 @@ void BlockDev_Init(void)
 
 uint32_t BlockDev_GetRamSectorCount(void) { return s_ram_sectors; }
 uint32_t BlockDev_GetFlashSectorCount(void) { return s_flash_sectors; }
-uint8_t BlockDev_GetMaxLun(void) { return BlockDev_MAX_LUN; }
 
 uint8_t BlockDev_IsReady(uint8_t lun)
 {
@@ -162,15 +150,12 @@ uint8_t BlockDev_IsReady(uint8_t lun)
     return (lun == 0u) ? s_ram_error : s_flash_error;
 }
 
-uint8_t BlockDev_IsWriteProtected(uint8_t lun) { (void)lun; return 0u; }
-uint8_t BlockDev_Flush(uint8_t lun) { return (lun > BlockDev_MAX_LUN) ? 1u : 0u; }
-void BlockDev_Process(void) { (void)flash_cache_commit(); }
+void BlockDev_Process(void) { flash_cache_commit(); }
 
 uint8_t BlockDev_Read(uint8_t lun, uint32_t lba, uint8_t *buf, uint16_t blocks)
 {
     uint32_t limit = (lun == 0u) ? s_ram_sectors : (lun == 1u) ? s_flash_sectors : 0u;
-    if (!buf || !blocks || lba >= limit || (uint32_t)blocks > limit - lba) return 1u;
-    if ((lun == 0u && s_ram_error) || (lun == 1u && s_flash_error)) return 1u;
+    if (!buf || !blocks || lba >= limit || (uint32_t)blocks > limit - lba || (lun == 1u && s_flash_error)) return 1u;
     for (uint16_t i = 0; i < blocks; ++i) {
         uint8_t *dst = &buf[i * BlockDev_SECTOR_SIZE];
         if (lun == 0u) {
@@ -191,8 +176,7 @@ uint8_t BlockDev_Read(uint8_t lun, uint32_t lba, uint8_t *buf, uint16_t blocks)
 uint8_t BlockDev_Write(uint8_t lun, uint32_t lba, const uint8_t *buf, uint16_t blocks)
 {
     uint32_t limit = (lun == 0u) ? s_ram_sectors : (lun == 1u) ? s_flash_sectors : 0u;
-    if (!buf || !blocks || lba >= limit || (uint32_t)blocks > limit - lba) return 1u;
-    if ((lun == 0u && s_ram_error) || (lun == 1u && s_flash_error)) return 1u;
+    if (!buf || !blocks || lba >= limit || (uint32_t)blocks > limit - lba || (lun == 1u && s_flash_error)) return 1u;
     if (lun == 1u && blocks > 1u) {
         uint32_t p0 = (BlockDev_FLASH_BASE + lba * BlockDev_SECTOR_SIZE) & ~(BlockDev_FLASH_PAGE_SIZE - 1u);
         uint32_t p1 = (BlockDev_FLASH_BASE + (lba + blocks - 1u) * BlockDev_SECTOR_SIZE) & ~(BlockDev_FLASH_PAGE_SIZE - 1u);
